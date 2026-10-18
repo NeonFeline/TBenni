@@ -15,7 +15,7 @@ __all__ = [
 
 def phonemize(
     text: str,
-    dialect: str = "warsaw",
+    dialect: str = "krakow",
     format: str = "ipa",
     stress: str = "prescriptive",
     include_stress: bool = True,
@@ -45,7 +45,7 @@ def phonemize(
 
 def phonemize_batch(
     texts: List[str],
-    dialect: str = "warsaw",
+    dialect: str = "krakow",
     format: str = "ipa",
     stress: str = "prescriptive",
     include_stress: bool = True,

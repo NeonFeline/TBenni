@@ -314,9 +314,9 @@ mod tests {
         assert_eq!(phonemize_with_config("auto", &config), "awtɔ");
 
         // 2. Anglicism dubbing
-        assert_eq!(phonemize_with_config("dubbing", &config), "dabʲink");
-        assert_eq!(phonemize_with_config("dubbingu", &config), "dabʲinɡu");
-        assert_eq!(phonemize_with_config("zdubbingować", &config), "zdabʲinɡɔvat͡ɕ");
+        assert_eq!(phonemize_with_config("dubbing", &config), "dabʲiŋk");
+        assert_eq!(phonemize_with_config("dubbingu", &config), "dabʲiŋɡu");
+        assert_eq!(phonemize_with_config("zdubbingować", &config), "zdabʲiŋɡɔvat͡ɕ");
 
         // 3. Prefix boundary dzi
         assert_eq!(phonemize_with_config("nadzieja", &config), "nad͡ʑɛja");
@@ -338,5 +338,120 @@ mod tests {
 
         // 7. Prefix bez- before i
         assert_eq!(phonemize_with_config("bezimienny", &config), "bɛzimʲɛnnɨ");
+    }
+
+    #[test]
+    fn test_sandhi_spreads_through_final_cluster() {
+        let krakow = Config {
+            dialect: Dialect::KrakowPoznan,
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            ..Default::default()
+        };
+        let warsaw = Config {
+            dialect: Dialect::Warsaw,
+            ..krakow.clone()
+        };
+        // Regressive voicing reaches the whole final cluster.
+        assert_eq!(phonemize_with_config("jest on", &krakow), "jɛzd ɔn");
+        assert_eq!(phonemize_with_config("jest dobrze", &krakow), "jɛzd dɔbʐɛ");
+        assert_eq!(phonemize_with_config("jest dobrze", &warsaw), "jɛzd dɔbʐɛ");
+        // Warsaw keeps the cluster voiceless before a vowel.
+        assert_eq!(phonemize_with_config("jest on", &warsaw), "jɛst ɔn");
+        // Sonorants block the spread (they stay in the coda).
+        assert_eq!(phonemize_with_config("karp idzie", &krakow), "karb id͡ʑɛ");
+    }
+
+    #[test]
+    fn test_w_devoicing_through_sonorants() {
+        let config = Config {
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            ..Default::default()
+        };
+        assert_eq!(phonemize_with_config("krwawy", &config), "krfavɨ");
+        assert_eq!(phonemize_with_config("trwać", &config), "trfat͡ɕ");
+        assert_eq!(phonemize_with_config("utrwalać", &config), "utrfalat͡ɕ");
+        // A voiced obstruent leaves [v] intact, and a vowel blocks the search.
+        assert_eq!(phonemize_with_config("drwal", &config), "drval");
+        assert_eq!(phonemize_with_config("sowa", &config), "sɔva");
+    }
+
+    #[test]
+    fn test_velar_glide_only_before_front_vowels() {
+        let config = Config {
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            ..Default::default()
+        };
+        assert_eq!(phonemize_with_config("kiosk", &config), "kʲɔsk");
+        assert_eq!(phonemize_with_config("giąć", &config), "ɡʲɔɲt͡ɕ");
+        // Learned -ia/-ie keeps the glide.
+        assert_eq!(phonemize_with_config("alergia", &config), "alɛrɡʲja");
+        assert_eq!(phonemize_with_config("celiakia", &config), "t͡sɛlʲakʲja");
+        assert_eq!(phonemize_with_config("hiena", &config), "xʲjɛna");
+    }
+
+    #[test]
+    fn test_prefix_after_nie_and_diphthong_respellings() {
+        let config = Config {
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            ..Default::default()
+        };
+        assert_eq!(phonemize_with_config("nieodzowny", &config), "ɲɛɔdzɔvnɨ");
+        assert_eq!(phonemize_with_config("zautomatyzować", &config), "zawtɔmatɨzɔvat͡ɕ");
+        assert_eq!(phonemize_with_config("nautyka", &config), "nawtɨka");
+        // Established hiatus cases stay unchanged.
+        assert_eq!(phonemize_with_config("nauka", &config), "nauka");
+        assert_eq!(phonemize_with_config("zaufać", &config), "zaufat͡ɕ");
+    }
+
+    #[test]
+    fn test_stress_mark_placement_in_clusters() {
+        let config = Config {
+            format: OutputFormat::IpaNarrow,
+            include_stress: true,
+            ..Default::default()
+        };
+        assert_eq!(phonemize_with_config("Warszawa", &config), "varˈʂava");
+        assert_eq!(phonemize_with_config("czternaście", &config), "t͡ʂtɛrˈnaɕt͡ɕɛ");
+        assert_eq!(phonemize_with_config("komnata", &config), "kɔmˈnata");
+        assert_eq!(phonemize_with_config("matematyka", &config), "matɛˈmatɨka");
+        assert_eq!(phonemize_with_config("brat", &config), "ˈbrat");
+    }
+
+    #[test]
+    fn test_nasal_place_assimilation_before_velars() {
+        let config = Config {
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            ..Default::default()
+        };
+        assert_eq!(phonemize_with_config("inkub", &config), "iŋkup");
+        assert_eq!(phonemize_with_config("kolorowanka", &config), "kɔlɔrɔvaŋka");
+        assert_eq!(phonemize_with_config("bank", &config), "baŋk");
+    }
+
+    #[test]
+    fn test_output_formats_keep_affricate_cluster_contrast() {
+        for format in [
+            OutputFormat::IpaNarrow,
+            OutputFormat::IpaBroad,
+            OutputFormat::Sampa,
+            OutputFormat::Piper,
+            OutputFormat::Benni,
+        ] {
+            let config = Config {
+                format,
+                include_stress: false,
+                ..Default::default()
+            };
+            assert_ne!(
+                phonemize_with_config("czysta", &config),
+                phonemize_with_config("trzysta", &config),
+                "format {format:?} merges czysta and trzysta"
+            );
+        }
     }
 }

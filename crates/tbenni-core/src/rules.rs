@@ -7,6 +7,9 @@ use crate::types::{Config, Dialect, StressMode};
 
 use std::borrow::Cow;
 
+/// Marker inserted by respellings to force a diphthong (za^utomatyzować -> [zawt...]).
+const FORCED_DIPHTHONG_MARKER: char = '^';
+
 /// Convert a single orthographic word into a vector of phonemes.
 pub fn phonemize_word(word: &str, config: &Config) -> Vec<Phoneme> {
     // Fast path: lowercase ASCII letters (plus ' and -) need no cleaning
@@ -61,6 +64,9 @@ pub fn phonemize_word(word: &str, config: &Config) -> Vec<Phoneme> {
 
     // 4. Pass 2: Contextual nasal vowel decomposition
     decompose_nasal_vowels(&mut phonemes, config);
+
+    // 4b. Pass 2b: Velar place assimilation of /n/ before k/g
+    apply_nasal_place_assimilation(&mut phonemes);
 
     // 5. Pass 3: Progressive devoicing of /v/ and /ʐ/ after voiceless obstruents
     apply_progressive_devoicing(&mut phonemes);
@@ -130,6 +136,7 @@ static RESPELL_STEMS: &[(&str, &str)] = &[
     ("kredens", "kredęs"),
     ("mail", "mejl"),
     ("manager", "menedżer"),
+    ("nautyk", "na^utyk"),
     ("nonsens", "nąsęs"),
     ("ofensyw", "ofęsyw"),
     ("online", "onlajn"),
@@ -142,6 +149,7 @@ static RESPELL_STEMS: &[(&str, &str)] = &[
     ("tensor", "tęsor"),
     ("weekend", "wikend"),
     ("whisk", "łisk"),
+    ("zautomatyz", "za^utomatyz"),
     ("zidentyfik", "z#identyfik"),
     ("zignor", "z#ignor"),
     ("zilustr", "z#ilustr"),
@@ -249,25 +257,36 @@ fn preprocess_morphemes(word: &str) -> Cow<'_, str> {
     }
 
     // Check for prefixes ending with 'd': od-, pod-, nad-, przed-
-    // when followed by z, ż, ź, s, sz, cz
+    // when followed by z, ż, ź, s, sz, cz. Check the word start and, for
+    // nie-prefixed forms, the position after nie- (nieodzowny -> nieod#zowny).
     let d_prefixes = ["od", "pod", "nad", "przed"];
-    for prefix in d_prefixes {
-        if has_prefix(word, prefix) {
-            let rest = &word[prefix.len()..];
-            // Exclude 'zi' because in Polish dzi is the single affricate [d͡ʑ]
-            // e.g. podzielić, podział, nadzieja, odzież, przedział
-            if rest.starts_with("zi") {
-                continue;
-            }
-            if rest.starts_with('z')
-                || rest.starts_with('ż')
-                || rest.starts_with('ź')
-                || rest.starts_with('s')
-                || rest.starts_with("cz")
-                || rest.starts_with("sz")
-            {
-                // Detach boundary: e.g. "od-znaczyć" -> "od#znaczyć"
-                return Cow::Owned(format!("{}#{}", prefix, rest));
+    for start in [0usize, 3] {
+        if start == 3 && !has_prefix(word, "nie") {
+            continue;
+        }
+        let tail = &word[start..];
+        for prefix in d_prefixes {
+            if has_prefix(tail, prefix) {
+                let rest = &tail[prefix.len()..];
+                // Exclude 'zi' because in Polish dzi is the single affricate [d͡ʑ]
+                // e.g. podzielić, podział, nadzieja, odzież, przedział
+                if rest.starts_with("zi") {
+                    continue;
+                }
+                if rest.starts_with('z')
+                    || rest.starts_with('ż')
+                    || rest.starts_with('ź')
+                    || rest.starts_with('s')
+                    || rest.starts_with("cz")
+                    || rest.starts_with("sz")
+                {
+                    // Detach boundary: e.g. "od-znaczyć" -> "od#znaczyć"
+                    let mut out = String::with_capacity(word.len() + 1);
+                    out.push_str(&word[..start + prefix.len()]);
+                    out.push('#');
+                    out.push_str(rest);
+                    return Cow::Owned(out);
+                }
             }
         }
     }
@@ -303,8 +322,8 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
         let next = chars.get(i + 1).copied();
         let next2 = chars.get(i + 2).copied();
 
-        // Boundary marker
-        if c == '#' {
+        // Boundary / respelling markers
+        if c == '#' || c == FORCED_DIPHTHONG_MARKER {
             i += 1;
             continue;
         }
@@ -527,9 +546,12 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
                     let is_velar = matches!(c, 'k' | 'g' | 'h');
                     let is_non_e = next2 != Some('e') && next2 != Some('ę');
                     let is_hie = c == 'h' && (next2 == Some('e') || next2 == Some('ę'));
+                    // Before a back vowel the 'i' is a palatalization marker only:
+                    // kiosk -> [kʲɔsk], giąć -> [ɡʲɔɲt͡ɕ] (no glide).
+                    let is_back_vowel = matches!(next2, Some('o' | 'ó' | 'u' | 'ą'));
                     // '-ii' after any consonant keeps the glide (armii -> [armʲji], kastylii -> [kastɨlʲji])
                     let is_ii = next2 == Some('i');
-                    if (is_velar && (is_non_e || is_hie)) || is_ii {
+                    if (is_velar && ((is_non_e && !is_back_vowel) || is_hie)) || is_ii {
                         result.push(Phoneme::J);
                     }
                     i += 2;
@@ -609,10 +631,12 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
                         || (next == Some('s') && next2 == Some('z'))
                         || (next == Some('t') && i + 2 == n));
                 // Morphological prefix hiatus: na-u (nauka), za-u (zaufać), nie-u (nieudany), po-u (pouczać)
-                let is_prefix_hiatus = (i == 2 && chars[i - 1] == 'a' && matches!(chars[0], 'n' | 'z'))
-                    || (i == 3 && chars[i - 1] == 'e' && chars[i - 2] == 'i' && chars[0] == 'n')
-                    || (i == 2 && chars[i - 1] == 'o' && chars[0] == 'p')
-                    || (i > 0 && chars[i - 1] == '#');
+                let forced_diphthong = i > 0 && chars[i - 1] == FORCED_DIPHTHONG_MARKER;
+                let is_prefix_hiatus = !forced_diphthong
+                    && ((i == 2 && chars[i - 1] == 'a' && matches!(chars[0], 'n' | 'z'))
+                        || (i == 3 && chars[i - 1] == 'e' && chars[i - 2] == 'i' && chars[0] == 'n')
+                        || (i == 2 && chars[i - 1] == 'o' && chars[0] == 'p')
+                        || (i > 0 && chars[i - 1] == '#'));
                 if is_prev_vowel && !is_eum_hiatus && !is_prefix_hiatus {
                     result.push(Phoneme::W);
                 } else {
@@ -813,20 +837,53 @@ fn stress_last_syllable(phonemes: &mut Vec<Phoneme>) {
     }
 }
 
+/// Pass 2b: /n/ assimilates to [ŋ] before velars (inkub -> [iŋkup], bank -> [baŋk]).
+fn apply_nasal_place_assimilation(phonemes: &mut [Phoneme]) {
+    for i in 0..phonemes.len().saturating_sub(1) {
+        if phonemes[i] == Phoneme::N
+            && matches!(
+                phonemes[i + 1],
+                Phoneme::K | Phoneme::G | Phoneme::KPal | Phoneme::GPal
+            )
+        {
+            phonemes[i] = Phoneme::Ng;
+        }
+    }
+}
+
 /// Pass 3: Progressive devoicing of /v/ and /ʐ/ after voiceless consonants (twój -> [tfuj], krzak -> [kʂak]).
 fn apply_progressive_devoicing(phonemes: &mut [Phoneme]) {
     for i in 1..phonemes.len() {
-        let prev = phonemes[i - 1];
         let curr = phonemes[i];
 
-        if prev.is_obstruent() && !prev.is_voiced() {
-            if curr == Phoneme::V {
-                phonemes[i] = Phoneme::F;
-            } else if curr == Phoneme::VPal {
-                phonemes[i] = Phoneme::FPal;
-            } else if curr == Phoneme::Rz {
-                phonemes[i] = Phoneme::Sz;
+        // /v/ devoices after a voiceless obstruent even with sonorants in between:
+        // krwawy -> [krfavɨ], trwać -> [trfat͡ɕ], utrwalać -> [utrfalat͡ɕ].
+        // Vowels block the search; sonorants (r, l, m, n, j, ł) are transparent.
+        if matches!(curr, Phoneme::V | Phoneme::VPal) {
+            let mut j = i;
+            while j > 0 {
+                let left = phonemes[j - 1];
+                if left.is_vowel() {
+                    break;
+                }
+                if left.is_obstruent() {
+                    if !left.is_voiced() {
+                        phonemes[i] = if curr == Phoneme::V {
+                            Phoneme::F
+                        } else {
+                            Phoneme::FPal
+                        };
+                    }
+                    break;
+                }
+                j -= 1;
             }
+            continue;
+        }
+
+        let prev = phonemes[i - 1];
+        if prev.is_obstruent() && !prev.is_voiced() && curr == Phoneme::Rz {
+            phonemes[i] = Phoneme::Sz;
         }
     }
 }
@@ -942,9 +999,21 @@ fn apply_stress(phonemes: &mut Vec<Phoneme>, word: &str, config: &Config) {
         }
     };
 
-    // Find the syllable onset (start of consonants preceding the target vowel)
+    // Find the syllable onset (start of consonants preceding the target vowel).
+    // A sonorant directly after a vowel is the coda of the previous syllable, not
+    // part of this onset: Warszawa -> varˈʂava, czternaście -> t͡ʂtɛrˈnaɕt͡ɕɛ.
+    // A sonorant immediately before the stressed vowel is the onset itself
+    // (matematyka -> matɛˈmatɨka), so it is always included.
     let mut insert_pos = target_vowel_idx;
     while insert_pos > 0 && !phonemes[insert_pos - 1].is_vowel() {
+        let candidate = phonemes[insert_pos - 1];
+        if insert_pos < target_vowel_idx
+            && candidate.is_sonorant()
+            && insert_pos >= 2
+            && phonemes[insert_pos - 2].is_vowel()
+        {
+            break;
+        }
         insert_pos -= 1;
     }
 

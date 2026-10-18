@@ -2,8 +2,15 @@
 Covers 50+ Polish linguistic traps, dialetical features, and formatting options.
 """
 
+import json
+from pathlib import Path
+
 import pytest
 import tbenni
+
+PIPER_MAP = json.loads(
+    (Path(__file__).parent / "piper_phoneme_id_map.json").read_text(encoding="utf-8")
+)
 
 
 class TestSibilantsAndAffricates:
@@ -183,5 +190,68 @@ class TestOutputFormats:
         assert tbenni.phonemize("wąs", format="benni", include_stress=False) == "vǫs"
 
     def test_sampa(self):
-        assert tbenni.phonemize("czysta", format="sampa", include_stress=False) == "tS1sta"
+        assert tbenni.phonemize("czysta", format="sampa", include_stress=False) == "t_S1sta"
+        assert tbenni.phonemize("trzysta", format="sampa", include_stress=False) == "tS1sta"
         assert tbenni.phonemize("chleb", format="sampa", include_stress=False) == "xlep"
+
+
+class TestConfirmedRegressions:
+    """Regression tests for reported sandhi, devoicing, prefix and stress bugs."""
+
+    def test_sandhi_spreads_leftward(self):
+        # The whole final cluster assimilates, not just the last consonant.
+        assert tbenni.phonemize("jest on", dialect="krakow", include_stress=False) == "jɛzd ɔn"
+        assert tbenni.phonemize("jest dobrze", dialect="krakow", include_stress=False) == "jɛzd dɔbʐɛ"
+        assert tbenni.phonemize("jest dobrze", dialect="warsaw", include_stress=False) == "jɛzd dɔbʐɛ"
+        assert tbenni.phonemize("jest on", dialect="warsaw", include_stress=False) == "jɛst ɔn"
+
+    def test_w_devoices_through_sonorants(self):
+        assert tbenni.phonemize("krwawy", include_stress=False) == "krfavɨ"
+        assert tbenni.phonemize("trwać", include_stress=False) == "trfat͡ɕ"
+        assert tbenni.phonemize("utrwalać", include_stress=False) == "utrfalat͡ɕ"
+
+    def test_velar_glide_overfire(self):
+        assert tbenni.phonemize("kiosk", include_stress=False) == "kʲɔsk"
+        assert tbenni.phonemize("giąć", include_stress=False) == "ɡʲɔɲt͡ɕ"
+        # Learned -ia/-ie keeps the glide.
+        assert tbenni.phonemize("alergia", include_stress=False) == "alɛrɡʲja"
+        assert tbenni.phonemize("hiena", include_stress=False) == "xʲjɛna"
+
+    def test_prefixes_after_nie_and_aw_respellings(self):
+        # d + z across the od- prefix inside nie- (not the d͡z affricate).
+        assert tbenni.phonemize("nieodzowny", include_stress=False) == "ɲɛɔdzɔvnɨ"
+        assert tbenni.phonemize("zautomatyzować", include_stress=False) == "zawtɔmatɨzɔvat͡ɕ"
+        assert tbenni.phonemize("nautyka", include_stress=False) == "nawtɨka"
+        # The established prefix-hiatus cases are unchanged.
+        assert tbenni.phonemize("nauka", include_stress=False) == "nauka"
+        assert tbenni.phonemize("zaufać", include_stress=False) == "zaufat͡ɕ"
+
+    def test_stress_mark_inside_clusters(self):
+        # A sonorant after a vowel is a coda, not part of the stressed onset.
+        assert tbenni.phonemize("Warszawa") == "varˈʂava"
+        assert tbenni.phonemize("czternaście") == "t͡ʂtɛrˈnaɕt͡ɕɛ"
+
+    def test_n_before_velars(self):
+        assert tbenni.phonemize("inkub", include_stress=False) == "iŋkup"
+        assert tbenni.phonemize("kolorowanka", include_stress=False) == "kɔlɔrɔvaŋka"
+
+
+class TestDefaultsAndFormats:
+    def test_python_default_dialect_is_krakow(self):
+        # Must match the Rust API, the CLI and the README.
+        assert tbenni.phonemize("brat ojca", include_stress=False) == "brad ɔjt͡sa"
+
+    @pytest.mark.parametrize("fmt", ["ipa", "ipa_broad", "sampa", "benni", "piper"])
+    def test_affricate_vs_cluster_survives_every_format(self, fmt):
+        assert tbenni.phonemize("czysta", format=fmt, include_stress=False) != tbenni.phonemize(
+            "trzysta", format=fmt, include_stress=False
+        )
+
+    def test_piper_output_uses_the_real_model_phoneme_map(self):
+        # tests/piper_phoneme_id_map.json is the phoneme_id_map of the trained
+        # pl_PL Piper model (models/tts_trained/model_tbenni.onnx.json).
+        words = ["czysta", "trzysta", "krwawy", "nieodzowny", "kiosk", "giąć", "Warszawa", "odznaczyć"]
+        for word in words:
+            out = tbenni.phonemize(word, format="piper", include_stress=False)
+            unknown = {ch for ch in out if ch not in PIPER_MAP}
+            assert not unknown, f"{word}: {out!r} has tokens outside the Piper map: {unknown}"

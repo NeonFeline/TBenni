@@ -19,11 +19,12 @@ pub enum Dialect {
     KrakowPoznan,
 
     /// Silesian ethnolect / dialect (Górny Śląsk / Ślōnskŏ gŏdka).
-    /// Features:
+    /// Implemented features:
     /// - Inter-word sandhi voicing (udźwięcznienie międzywyrazowe).
-    /// - Asynchronous / decomposed nasal vowels (e.g. ą -> ōm/ōn, ę -> ym/yn, wygłos -ą -> -om/-um, -ę -> -a/-ym).
     /// - Initial /o-/ labialization (np. okno -> [wɔknɔ]).
-    /// - Raised / slanted vowels (samogłoski pochylone).
+    /// - é (e pochylone) -> [ɨ].
+    /// NOT implemented: decomposed/asynchronous nasal vowels (ą -> ōm/ōn)
+    /// and the full Silesian vowel-raising system.
     Slask,
 }
 

@@ -353,12 +353,12 @@ impl Phoneme {
             Phoneme::FPal => "fʲ",
             Phoneme::VPal => "vʲ",
             Phoneme::MPal => "mʲ",
-            Phoneme::C => "ts",
-            Phoneme::Dz => "dz",
-            Phoneme::Cz => "tʂ",
-            Phoneme::DzRetro => "dʐ",
-            Phoneme::Ci => "tɕ",
-            Phoneme::Dzi => "dʑ",
+            Phoneme::C => "t͡s",
+            Phoneme::Dz => "d͡z",
+            Phoneme::Cz => "t͡ʂ",
+            Phoneme::DzRetro => "d͡ʐ",
+            Phoneme::Ci => "t͡ɕ",
+            Phoneme::Dzi => "d͡ʑ",
             Phoneme::F => "f",
             Phoneme::V => "v",
             Phoneme::S => "s",
@@ -495,12 +495,12 @@ impl Phoneme {
             Phoneme::FPal => "f'",
             Phoneme::VPal => "v'",
             Phoneme::MPal => "m'",
-            Phoneme::C => "ts",
-            Phoneme::Dz => "dz",
-            Phoneme::Cz => "tS",
-            Phoneme::DzRetro => "dZ",
-            Phoneme::Ci => "ts\\",
-            Phoneme::Dzi => "dz\\",
+            Phoneme::C => "t_s",
+            Phoneme::Dz => "d_z",
+            Phoneme::Cz => "t_S",
+            Phoneme::DzRetro => "d_Z",
+            Phoneme::Ci => "t_s\\",
+            Phoneme::Dzi => "d_z\\",
             Phoneme::F => "f",
             Phoneme::V => "v",
             Phoneme::S => "s",
@@ -541,7 +541,10 @@ impl Phoneme {
     }
 
     pub fn to_piper(&self) -> &'static str {
-        // Piper TTS expects decomposed NFD IPA without tie bars for pl_PL
+        // Piper's phoneme_id_map is character-based (no tie bars). Affricates are
+        // written as stop + fricative; they use the retroflex fricative (tʂ, dʐ) so
+        // they stay distinct from real clusters (trzysta -> tʃ), while sz/ż keep
+        // eSpeak's palato-alveolar symbols.
         match self {
             Phoneme::A => "a",
             Phoneme::E => "ɛ",
@@ -569,8 +572,8 @@ impl Phoneme {
             Phoneme::MPal => "m\u{02B2}",
             Phoneme::C => "ts",
             Phoneme::Dz => "dz",
-            Phoneme::Cz => "tʃ",
-            Phoneme::DzRetro => "dʒ",
+            Phoneme::Cz => "tʂ",
+            Phoneme::DzRetro => "dʐ",
             Phoneme::Ci => "tɕ",
             Phoneme::Dzi => "dʑ",
             Phoneme::F => "f",

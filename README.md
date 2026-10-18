@@ -9,13 +9,13 @@ conversion engine and phonemizer written in Rust with Python bindings.
 - **Dialect & Sandhi Support**:
   - `Warsaw` (Standard Central-Eastern Polish: inter-word devoicing).
   - `KrakowPoznan` (Standard Southern/Western Polish: inter-word voicing).
-  - `Slask` (Silesian / Śląsk: decomposed nasal vowels, labialization, vowel raising, inter-word voicing).
+  - `Slask` (Silesian / Śląsk: initial o- labialization `[wɔknɔ]`, é → `[ɨ]`, inter-word voicing).
 - **Phonetic Output Formats**:
   - `IpaNarrow`: Allophonic narrow IPA transcription (e.g. `[t͡ʂɨsta]`, `[vɔw̃s]`, `[dɔmp]`).
   - `IpaBroad`: Broad phonemic IPA transcription (e.g. `/tʂɨsta/`, `/vɔws/`, `/dɔmp/`).
   - `Sampa` / `XSampa`: 7-bit ASCII representation.
   - `Benni` (Slavic Phonetic Alphabet - AS): Single-glyph affricates (`č, ǯ, ć, ʒ́, c, ʒ`).
-  - `Piper`: Decomposed token map directly compatible with Piper TTS ONNX models.
+  - `Piper`: Decomposed token map compatible with Piper TTS ONNX models (validated against the pl_PL phoneme_id_map).
 - **Stress Modes**:
   - `Prescriptive`: Standard antepenultimate stress on Latin borrowings (*fizyka*, *matematyka*) and past-tense verbs (*byliśmy*, *zrobilibyśmy*).
   - `Colloquial`: Regularized penultimate stress.
