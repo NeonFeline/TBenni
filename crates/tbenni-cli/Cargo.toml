@@ -1,0 +1,15 @@
+[package]
+name = "tbenni-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Command-line interface for TBenni Polish Phonemizer"
+
+[[bin]]
+name = "tbenni"
+path = "src/main.rs"
+
+[dependencies]
+tbenni-core = { path = "../tbenni-core", features = ["serde"] }
+clap = { version = "4.5", features = ["derive"] }

@@ -1,0 +1,21 @@
+[workspace]
+members = [
+    "crates/tbenni-core",
+    "crates/tbenni-cli",
+    "crates/tbenni-py",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["TBenni Contributors"]
+license = "MIT OR Apache-2.0"
+description = "High-performance Polish Phonemizer named in honor of Tytus Benni"
+repository = "https://github.com/tbenni/tbenni"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"

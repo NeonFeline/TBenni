@@ -1,0 +1,26 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "tbenni"
+version = "0.1.0"
+description = "High-performance Polish Phonemizer named in honor of Tytus Benni"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT OR Apache-2.0" }
+authors = [{ name = "TBenni Contributors" }]
+keywords = ["phonemizer", "g2p", "polish", "nlp", "speech", "tts", "benni", "silesian"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+dependencies = []
+
+[tool.maturin]
+manifest-path = "crates/tbenni-py/Cargo.toml"
+module-name = "tbenni._tbenni"
+python-source = "python"

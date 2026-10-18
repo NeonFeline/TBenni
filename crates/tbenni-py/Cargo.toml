@@ -1,0 +1,16 @@
+[package]
+name = "tbenni-py"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Python bindings for TBenni Polish Phonemizer"
+
+[lib]
+name = "_tbenni"
+crate-type = ["cdylib"]
+
+[dependencies]
+tbenni-core = { path = "../tbenni-core", features = ["serde"] }
+pyo3 = { version = "0.22", features = ["extension-module"] }
+rayon = "1.10"
