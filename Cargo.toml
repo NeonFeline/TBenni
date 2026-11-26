@@ -12,7 +12,6 @@ edition = "2021"
 authors = ["TBenni Contributors"]
 license = "MIT OR Apache-2.0"
 description = "High-performance Polish Phonemizer named in honor of Tytus Benni"
-homepage = "https://github.com/NeonFeline/TBenni"
 repository = "https://github.com/NeonFeline/TBenni"
 
 [profile.release]

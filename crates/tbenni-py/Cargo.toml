@@ -5,7 +5,6 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 description = "Python bindings for TBenni Polish Phonemizer"
-homepage.workspace = true
 repository.workspace = true
 
 [lib]
