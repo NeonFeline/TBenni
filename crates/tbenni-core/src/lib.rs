@@ -2,6 +2,7 @@
 //! Named in honor of Tytus Benni (1877–1935).
 
 pub mod exceptions;
+pub mod langs;
 pub mod phoneme;
 pub mod rules;
 pub mod sandhi;
@@ -12,11 +13,94 @@ pub use exceptions::{is_antepenultimate_stress_word, lookup_loanword_override};
 pub use phoneme::Phoneme;
 pub use rules::phonemize_word;
 pub use sandhi::apply_sandhi;
-pub use types::{Config, Dialect, OutputFormat, StressMode};
+pub use types::{Config, Dialect, OutputFormat, SilesianRegion, StressMode};
+
+/// Phonemize text for a specific language (e.g. "pl", "cs", "hr", "bg", "uk", "ru", "de").
+/// Polish (and any unknown code) uses the main Polish engine with the default configuration.
+pub fn phonemize_lang(text: &str, lang: &str) -> String {
+    phonemize_lang_stage(text, lang, langs::engine::Stage::Full)
+}
+
+/// Like [`phonemize_lang`], but for the distilled languages only the given engine layers are
+/// applied (used for the ablation study). Other languages ignore `stage`.
+pub fn phonemize_lang_stage(text: &str, lang: &str, stage: langs::engine::Stage) -> String {
+    let lang: std::borrow::Cow<str> = if lang.bytes().any(|b| b.is_ascii_uppercase()) {
+        std::borrow::Cow::Owned(lang.to_lowercase())
+    } else {
+        std::borrow::Cow::Borrowed(lang)
+    };
+    if let Some(spec) = langs::spec(&lang) {
+        return text
+            .split_whitespace()
+            .map(|tok| {
+                let chars: Vec<char> = tok.chars().collect();
+                let lead_len = chars.iter().take_while(|&&c| !c.is_alphanumeric()).count();
+                if lead_len == chars.len() {
+                    return tok.to_string();
+                }
+                let trail_len = chars
+                    .iter()
+                    .rev()
+                    .take_while(|&&c| !c.is_alphanumeric())
+                    .count();
+                let prefix: String = chars[..lead_len].iter().collect();
+                let core: String = chars[lead_len..chars.len() - trail_len].iter().collect();
+                let suffix: String = chars[chars.len() - trail_len..].iter().collect();
+
+                let phones = langs::engine::phonemize_word(spec, &core, stage);
+                format!("{}{}{}", prefix, phones, suffix)
+            })
+            .collect::<Vec<_>>()
+            .join(" ");
+    }
+    match &*lang {
+        "de" | "german" => text
+            .split_whitespace()
+            .map(|tok| {
+                let chars: Vec<char> = tok.chars().collect();
+                let lead_len = chars.iter().take_while(|&&c| !c.is_alphanumeric()).count();
+                if lead_len == chars.len() {
+                    return tok.to_string();
+                }
+                let trail_len = chars
+                    .iter()
+                    .rev()
+                    .take_while(|&&c| !c.is_alphanumeric())
+                    .count();
+                let prefix: String = chars[..lead_len].iter().collect();
+                let core: String = chars[lead_len..chars.len() - trail_len].iter().collect();
+                let suffix: String = chars[chars.len() - trail_len..].iter().collect();
+
+                let phones = langs::de::phonemize_de_word(&core);
+                format!("{}{}{}", prefix, phones, suffix)
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => phonemize(text),
+    }
+}
+
+/// Base-mapper segmentation of a word for a distilled language (see `langs::engine`).
+pub fn base_segments(word: &str, lang: &str) -> Option<Vec<(String, String)>> {
+    langs::spec(&lang.to_lowercase()).map(|spec| langs::engine::base_segments(spec, word))
+}
 
 /// Phonemize an entire text utterance with default configuration.
 pub fn phonemize(text: &str) -> String {
     phonemize_with_config(text, &Config::default())
+}
+
+#[derive(Debug, Clone)]
+enum TokenContent {
+    Word(String),
+    Literal(String),
+}
+
+#[derive(Debug, Clone)]
+struct UtteranceToken {
+    prefix_punct: String,
+    content: TokenContent,
+    suffix_punct: String,
 }
 
 /// Phonemize text with a custom configuration.
@@ -38,69 +122,94 @@ pub fn phonemize_with_config(text: &str, config: &Config) -> String {
         return output;
     }
 
-    let mut words_with_punct: Vec<(String, Option<char>)> = Vec::new();
+    let mut tokens: Vec<UtteranceToken> = Vec::new();
 
-    // Simple tokenizer respecting punctuation
-    for token in text.split_whitespace() {
-        let mut clean_word = String::new();
-        let mut trailing_punct = None;
-
-        for c in token.chars() {
-            if c.is_alphabetic() || c == '-' || c == '\'' || c == 'ō' || c == 'é' || c == 'á' || c == 'ů' {
-                clean_word.push(c);
-            } else if matches!(c, '.' | ',' | '!' | '?' | ':' | ';') {
-                trailing_punct = Some(c);
-            }
+    for raw_token in text.split_whitespace() {
+        let chars: Vec<char> = raw_token.chars().collect();
+        let lead_len = chars.iter().take_while(|&&c| !c.is_alphanumeric()).count();
+        if lead_len == chars.len() {
+            tokens.push(UtteranceToken {
+                prefix_punct: String::new(),
+                content: TokenContent::Literal(raw_token.to_string()),
+                suffix_punct: String::new(),
+            });
+            continue;
         }
 
-        if !clean_word.is_empty() {
-            words_with_punct.push((clean_word, trailing_punct));
-        } else if let Some(p) = trailing_punct {
-            words_with_punct.push((String::new(), Some(p)));
-        }
+        let trail_len = chars
+            .iter()
+            .rev()
+            .take_while(|&&c| !c.is_alphanumeric())
+            .count();
+        let prefix_punct: String = chars[..lead_len].iter().collect();
+        let core: String = chars[lead_len..chars.len() - trail_len].iter().collect();
+        let suffix_punct: String = chars[chars.len() - trail_len..].iter().collect();
+
+        // If core contains digits, preserve as literal rather than silently dropping!
+        let content = if core.chars().any(|c| c.is_ascii_digit()) {
+            TokenContent::Literal(core)
+        } else {
+            TokenContent::Word(core)
+        };
+
+        tokens.push(UtteranceToken {
+            prefix_punct,
+            content,
+            suffix_punct,
+        });
     }
 
-    if words_with_punct.is_empty() {
+    if tokens.is_empty() {
         return String::new();
     }
 
-    // Phonemize each word
-    let mut words_phonemes: Vec<Vec<Phoneme>> = words_with_punct
-        .iter()
-        .map(|(w, _)| {
-            if w.is_empty() {
-                Vec::new()
-            } else {
-                phonemize_word(w, config)
+    // Phonemize words
+    let mut words_phonemes: Vec<Vec<Phoneme>> = Vec::with_capacity(tokens.len());
+    let mut has_trailing_punct: Vec<bool> = Vec::with_capacity(tokens.len());
+
+    for (i, tok) in tokens.iter().enumerate() {
+        match &tok.content {
+            TokenContent::Word(w) => {
+                let phonemes = phonemize_word(w, config);
+                words_phonemes.push(phonemes);
+                let is_barrier = !tok.suffix_punct.is_empty()
+                    || tokens.get(i + 1).is_none_or(|next| {
+                        !next.prefix_punct.is_empty()
+                            || matches!(next.content, TokenContent::Literal(_))
+                    });
+                has_trailing_punct.push(is_barrier);
             }
-        })
-        .collect();
+            TokenContent::Literal(_) => {
+                words_phonemes.push(Vec::new());
+                has_trailing_punct.push(true);
+            }
+        }
+    }
 
     // Apply Sandhi across word boundaries
     if config.apply_sandhi {
-        let has_trailing_punct: Vec<bool> = words_with_punct
-            .iter()
-            .map(|(_, punct)| punct.is_some())
-            .collect();
         apply_sandhi(&mut words_phonemes, &has_trailing_punct, config);
     }
 
     // Assemble rendered output string
     let mut output = String::new();
-    let num_words = words_phonemes.len();
+    let num_tokens = tokens.len();
 
-    for (i, phonemes) in words_phonemes.iter().enumerate() {
-        for p in phonemes {
-            output.push_str(p.render(config.format));
+    for (i, tok) in tokens.iter().enumerate() {
+        output.push_str(&tok.prefix_punct);
+        match &tok.content {
+            TokenContent::Word(_) => {
+                for p in &words_phonemes[i] {
+                    output.push_str(p.render(config.format));
+                }
+            }
+            TokenContent::Literal(lit) => {
+                output.push_str(lit);
+            }
         }
+        output.push_str(&tok.suffix_punct);
 
-        // Add trailing punctuation if any
-        if let Some((_, Some(punct))) = words_with_punct.get(i) {
-            output.push(*punct);
-        }
-
-        // Add word separator
-        if i + 1 < num_words {
+        if i + 1 < num_tokens {
             output.push(' ');
         }
     }
@@ -222,16 +331,28 @@ mod tests {
         config_krakow.dialect = Dialect::KrakowPoznan;
 
         // "brat ojca" -> Warsaw [brat ɔjt͡sa] vs Krakow [brad ɔjt͡sa]
-        assert_eq!(phonemize_with_config("brat ojca", &config_warsaw), "brat ɔjt͡sa");
-        assert_eq!(phonemize_with_config("brat ojca", &config_krakow), "brad ɔjt͡sa");
+        assert_eq!(
+            phonemize_with_config("brat ojca", &config_warsaw),
+            "brat ɔjt͡sa"
+        );
+        assert_eq!(
+            phonemize_with_config("brat ojca", &config_krakow),
+            "brad ɔjt͡sa"
+        );
 
         // Vowel-final words must NEVER have internal consonants modified by sandhi!
         // "kącie, a" -> [kɔɲt͡ɕɛ, a] (NEVER *kɔɲd͡ʑɛ)
-        assert_eq!(phonemize_with_config("przy kącie, a", &config_krakow), "pʂɨ kɔɲt͡ɕɛ, a");
+        assert_eq!(
+            phonemize_with_config("przy kącie, a", &config_krakow),
+            "pʂɨ kɔɲt͡ɕɛ, a"
+        );
         assert_eq!(phonemize_with_config("kącie i", &config_krakow), "kɔɲt͡ɕɛ i");
 
         // Punctuation blocks sandhi:
-        assert_eq!(phonemize_with_config("brat, ojca", &config_krakow), "brat, ɔjt͡sa");
+        assert_eq!(
+            phonemize_with_config("brat, ojca", &config_krakow),
+            "brat, ɔjt͡sa"
+        );
     }
 
     #[test]
@@ -247,6 +368,67 @@ mod tests {
         assert_eq!(phonemize_with_config("okno", &config), "wɔknɔ");
         // Sandhi voicing: brat ojca -> [brad w-...]
         assert!(phonemize_with_config("brat ojca", &config).starts_with("brad"));
+    }
+
+    #[test]
+    fn test_silesian_nasal_decomposition() {
+        let config = Config {
+            dialect: Dialect::Slask,
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            ..Default::default()
+        };
+        // Word-final -ą -> "-ōm" (nosówki rozłożone)
+        assert_eq!(phonemize_with_config("idą", &config), "idom");
+        assert_eq!(phonemize_with_config("są", &config), "som");
+        // Before stops: homorganic nasal + raised nucleus ("piōntek", "kōmpiel")
+        assert_eq!(phonemize_with_config("piątek", &config), "pʲontɛk");
+        assert_eq!(phonemize_with_config("kąpiel", &config), "kompʲɛl");
+        // Before fricatives: consonantal nasality [n] ("Ślōnsk")
+        assert_eq!(phonemize_with_config("mąż", &config), "monʂ");
+        assert_eq!(phonemize_with_config("chrząszcz", &config), "xʂonʂt͡ʂ");
+        // ę-nucleus stays plain [ɛ]
+        assert_eq!(phonemize_with_config("zęby", &config), "zɛmbɨ");
+        assert_eq!(phonemize_with_config("ręka", &config), "rɛŋka");
+        // Before liquids: bare nucleus ("wziōł")
+        assert_eq!(phonemize_with_config("wziął", &config), "vʑow");
+    }
+
+    #[test]
+    fn test_silesian_nasal_raising_toggle() {
+        let config = Config {
+            dialect: Dialect::Slask,
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            silesian_raising: false,
+            ..Default::default()
+        };
+        // Without the raising stage the ą-nucleus stays [ɔ]
+        assert_eq!(phonemize_with_config("idą", &config), "idɔm");
+        assert_eq!(phonemize_with_config("piątek", &config), "pʲɔntɛk");
+    }
+
+    #[test]
+    fn test_silesian_region_final_e() {
+        let base = Config {
+            dialect: Dialect::Slask,
+            format: OutputFormat::IpaNarrow,
+            include_stress: false,
+            ..Default::default()
+        };
+        // Word-final -ę reflexes: Katowice [a], Opole [ã], Cieszyn [e]
+        let katowice = base.clone();
+        assert_eq!(phonemize_with_config("idę", &katowice), "ida");
+        let opole = Config {
+            silesian_region: SilesianRegion::Opole,
+            ..base.clone()
+        };
+        assert_eq!(phonemize_with_config("idę", &opole), "idã");
+        let cieszyn = Config {
+            silesian_region: SilesianRegion::Cieszyn,
+            ..base
+        };
+        assert_eq!(phonemize_with_config("idę", &cieszyn), "idɛ");
     }
 
     #[test]
@@ -316,7 +498,10 @@ mod tests {
         // 2. Anglicism dubbing
         assert_eq!(phonemize_with_config("dubbing", &config), "dabʲiŋk");
         assert_eq!(phonemize_with_config("dubbingu", &config), "dabʲiŋɡu");
-        assert_eq!(phonemize_with_config("zdubbingować", &config), "zdabʲiŋɡɔvat͡ɕ");
+        assert_eq!(
+            phonemize_with_config("zdubbingować", &config),
+            "zdabʲiŋɡɔvat͡ɕ"
+        );
 
         // 3. Prefix boundary dzi
         assert_eq!(phonemize_with_config("nadzieja", &config), "nad͡ʑɛja");
@@ -328,10 +513,22 @@ mod tests {
         assert_eq!(phonemize_with_config("unia", &config), "uɲja");
 
         // 5. Numeral compound simplification
-        assert_eq!(phonemize_with_config("pięćdziesiąt", &config), "pʲɛɲd͡ʑɛɕɔnt");
-        assert_eq!(phonemize_with_config("pięćdziesiąta", &config), "pʲɛɲt͡ɕd͡ʑɛɕɔnta");
-        assert_eq!(phonemize_with_config("sześćdziesiąt", &config), "ʂɛʑd͡ʑɛɕɔnt");
-        assert_eq!(phonemize_with_config("sześćdziesiąta", &config), "ʂɛɕt͡ɕd͡ʑɛɕɔnta");
+        assert_eq!(
+            phonemize_with_config("pięćdziesiąt", &config),
+            "pʲɛɲd͡ʑɛɕɔnt"
+        );
+        assert_eq!(
+            phonemize_with_config("pięćdziesiąta", &config),
+            "pʲɛɲt͡ɕd͡ʑɛɕɔnta"
+        );
+        assert_eq!(
+            phonemize_with_config("sześćdziesiąt", &config),
+            "ʂɛʑd͡ʑɛɕɔnt"
+        );
+        assert_eq!(
+            phonemize_with_config("sześćdziesiąta", &config),
+            "ʂɛɕt͡ɕd͡ʑɛɕɔnta"
+        );
 
         // 6. Sanskrit bh-
         assert_eq!(phonemize_with_config("bhutan", &config), "butan");
@@ -378,6 +575,29 @@ mod tests {
     }
 
     #[test]
+    fn test_numbers_and_punctuation_preservation() {
+        let config = Config {
+            format: OutputFormat::IpaNarrow,
+            include_stress: true,
+            ..Default::default()
+        };
+        // Digits are preserved and not silently dropped
+        assert_eq!(phonemize_with_config("rok 2024", &config), "ˈrɔk 2024");
+        // Leading and trailing punctuation preserved
+        assert_eq!(
+            phonemize_with_config("„Dzień dobry!”", &config),
+            "„ˈd͡ʑɛɲ ˈdɔbrɨ!”"
+        );
+        // Multilingual punctuation stripping for exception lookup
+        let cs_out = phonemize_lang("chleba.", "cs");
+        assert!(
+            cs_out.ends_with('.'),
+            "Expected trailing dot in cs_out, got: {cs_out}"
+        );
+        assert_eq!(cs_out, "xlɛba.");
+    }
+
+    #[test]
     fn test_velar_glide_only_before_front_vowels() {
         let config = Config {
             format: OutputFormat::IpaNarrow,
@@ -400,7 +620,10 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(phonemize_with_config("nieodzowny", &config), "ɲɛɔdzɔvnɨ");
-        assert_eq!(phonemize_with_config("zautomatyzować", &config), "zawtɔmatɨzɔvat͡ɕ");
+        assert_eq!(
+            phonemize_with_config("zautomatyzować", &config),
+            "zawtɔmatɨzɔvat͡ɕ"
+        );
         assert_eq!(phonemize_with_config("nautyka", &config), "nawtɨka");
         // Established hiatus cases stay unchanged.
         assert_eq!(phonemize_with_config("nauka", &config), "nauka");
@@ -415,7 +638,10 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(phonemize_with_config("Warszawa", &config), "varˈʂava");
-        assert_eq!(phonemize_with_config("czternaście", &config), "t͡ʂtɛrˈnaɕt͡ɕɛ");
+        assert_eq!(
+            phonemize_with_config("czternaście", &config),
+            "t͡ʂtɛrˈnaɕt͡ɕɛ"
+        );
         assert_eq!(phonemize_with_config("komnata", &config), "kɔmˈnata");
         assert_eq!(phonemize_with_config("matematyka", &config), "matɛˈmatɨka");
         assert_eq!(phonemize_with_config("brat", &config), "ˈbrat");

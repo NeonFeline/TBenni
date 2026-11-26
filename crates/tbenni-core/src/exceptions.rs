@@ -4,6 +4,7 @@ use crate::phoneme::Phoneme;
 use crate::strutil;
 
 /// Distilled loanword and acronym static lexicon, sorted for O(log N) binary search.
+#[rustfmt::skip]
 static LOANWORD_LEXICON: &[(&str, &[Phoneme])] = &[
     ("abc", &[Phoneme::A, Phoneme::B, Phoneme::E, Phoneme::C, Phoneme::E]),
     ("abw", &[Phoneme::A, Phoneme::B, Phoneme::E, Phoneme::V, Phoneme::U]),

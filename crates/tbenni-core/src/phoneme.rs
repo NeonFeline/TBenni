@@ -20,6 +20,7 @@ pub enum Phoneme {
     // Nasal Vowels / Glides
     ENasal, // [ɛw̃]
     ONasal, // [ɔw̃]
+    ANasal, // [ã] Silesian (Opole) word-final -ę ("a z tyldą")
 
     // Plosives
     P,
@@ -101,6 +102,7 @@ impl Phoneme {
                 | Phoneme::ASlant
                 | Phoneme::ENasal
                 | Phoneme::ONasal
+                | Phoneme::ANasal
         )
     }
 
@@ -266,6 +268,7 @@ impl Phoneme {
             Phoneme::ASlant => "ɔ",
             Phoneme::ENasal => "ɛw̃",
             Phoneme::ONasal => "ɔw̃",
+            Phoneme::ANasal => "ã",
             Phoneme::P => "p",
             Phoneme::B => "b",
             Phoneme::T => "t",
@@ -340,6 +343,7 @@ impl Phoneme {
             Phoneme::ASlant => "ɔ",
             Phoneme::ENasal => "ɛ̃",
             Phoneme::ONasal => "ɔ̃",
+            Phoneme::ANasal => "ã",
             Phoneme::P => "p",
             Phoneme::B => "b",
             Phoneme::T => "t",
@@ -411,6 +415,7 @@ impl Phoneme {
             Phoneme::ASlant => "á",
             Phoneme::ENasal => "ę",
             Phoneme::ONasal => "ǫ",
+            Phoneme::ANasal => "ą",
             Phoneme::P => "p",
             Phoneme::B => "b",
             Phoneme::T => "t",
@@ -482,6 +487,7 @@ impl Phoneme {
             Phoneme::ASlant => "o",
             Phoneme::ENasal => "e~",
             Phoneme::ONasal => "o~",
+            Phoneme::ANasal => "a~",
             Phoneme::P => "p",
             Phoneme::B => "b",
             Phoneme::T => "t",
@@ -557,6 +563,7 @@ impl Phoneme {
             Phoneme::ASlant => "ɔ",
             Phoneme::ENasal => "ɛ\u{0303}",
             Phoneme::ONasal => "ɔ\u{0303}",
+            Phoneme::ANasal => "a\u{0303}",
             Phoneme::P => "p",
             Phoneme::B => "b",
             Phoneme::T => "t",

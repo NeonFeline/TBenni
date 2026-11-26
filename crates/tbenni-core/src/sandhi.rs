@@ -5,7 +5,7 @@ use crate::types::{Config, Dialect};
 
 /// Apply inter-word sandhi across tokens in a sentence.
 pub fn apply_sandhi(
-    words_phonemes: &mut Vec<Vec<Phoneme>>,
+    words_phonemes: &mut [Vec<Phoneme>],
     has_trailing_punct: &[bool],
     config: &Config,
 ) {

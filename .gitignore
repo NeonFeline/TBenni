@@ -1,6 +1,7 @@
 /target/
 /.venv/
 /dist/
+/build/
 __pycache__/
 *.pyc
 *.pyo
@@ -8,3 +9,6 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 *.so
+/models/
+*.onnx
+*.wav

@@ -21,7 +21,8 @@ pub(crate) fn contains(s: &str, needle: &str) -> bool {
     if n.is_empty() || s.len() < n.len() {
         return n.is_empty();
     }
-    (0..=s.len() - n.len()).any(|i| s[i] == n[0] && s[i..i + n.len()].iter().zip(n).all(|(a, b)| a == b))
+    (0..=s.len() - n.len())
+        .any(|i| s[i] == n[0] && s[i..i + n.len()].iter().zip(n).all(|(a, b)| a == b))
 }
 
 #[inline]
@@ -41,7 +42,16 @@ mod tests {
 
     #[test]
     fn helpers_match_std() {
-        let words = ["", "a", "rz", "marznąć", "dziesiąt", "pięćdziesiąt", "ząb", "zrobiliśmy"];
+        let words = [
+            "",
+            "a",
+            "rz",
+            "marznąć",
+            "dziesiąt",
+            "pięćdziesiąt",
+            "ząb",
+            "zrobiliśmy",
+        ];
         let pats = ["", "rz", "dziesiąt", "z", "ąb", "liśmy", "marznąć!"];
         for w in words {
             for p in pats {

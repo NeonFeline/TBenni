@@ -152,6 +152,40 @@ class TestSandhiAndDialects:
         # Sandhi voicing
         assert tbenni.phonemize("brat ojca", dialect="slask", include_stress=False).startswith("brad")
 
+    def test_silesian_nasal_decomposition(self):
+        # nosówki rozłożone (Cieszyn norm): ą/ę -> oral vowel + homorganic nasal
+        # Word-final -ą -> "-ōm"
+        assert tbenni.phonemize("idą", dialect="slask", include_stress=False) == "idom"
+        assert tbenni.phonemize("są", dialect="slask", include_stress=False) == "som"
+        # Before stops: homorganic nasal, raised nucleus ("piōntek", "kōmpiel")
+        assert tbenni.phonemize("piątek", dialect="slask", include_stress=False) == "pʲontɛk"
+        assert tbenni.phonemize("kąpiel", dialect="slask", include_stress=False) == "kompʲɛl"
+        # Before fricatives: consonantal nasality [n] ("Ślōnsk")
+        assert tbenni.phonemize("mąż", dialect="slask", include_stress=False) == "monʂ"
+        assert tbenni.phonemize("chrząszcz", dialect="slask", include_stress=False) == "xʂonʂt͡ʂ"
+        # ę-nucleus stays plain [ɛ]
+        assert tbenni.phonemize("zęby", dialect="slask", include_stress=False) == "zɛmbɨ"
+        assert tbenni.phonemize("ręka", dialect="slask", include_stress=False) == "rɛŋka"
+        # Before liquids: bare nucleus ("wziōł")
+        assert tbenni.phonemize("wziął", dialect="slask", include_stress=False) == "vʑow"
+
+    def test_silesian_nasal_raising_toggle(self):
+        # Raising stage off: ą-nucleus stays [ɔ]
+        assert tbenni.phonemize("idą", dialect="slask", include_stress=False, silesian_raising=False) == "idɔm"
+        assert tbenni.phonemize("piątek", dialect="slask", include_stress=False, silesian_raising=False) == "pʲɔntɛk"
+
+    def test_silesian_region_final_e(self):
+        # Word-final -ę reflexes: Katowice [a], Opole [ã], Cieszyn [e]
+        assert tbenni.phonemize("idę", dialect="slask", include_stress=False, region="katowice") == "ida"
+        assert tbenni.phonemize("idę", dialect="slask", include_stress=False, region="opole") == "idã"
+        assert tbenni.phonemize("idę", dialect="slask", include_stress=False, region="cieszyn") == "idɛ"
+
+    def test_silesian_nasals_leave_standard_polish_untouched(self):
+        # Standard Polish keeps the nasal glides / cultured -ę
+        assert tbenni.phonemize("idą", include_stress=False) == "idɔw̃"
+        assert tbenni.phonemize("piątek", include_stress=False) == "pʲɔntɛk"
+        assert tbenni.phonemize("idę", include_stress=False) == "idɛ"
+
 
 class TestStressParadigms:
     """Verifies prescriptive antepenultimate stress vs colloquial penultimate."""
@@ -237,9 +271,9 @@ class TestConfirmedRegressions:
 
 
 class TestDefaultsAndFormats:
-    def test_python_default_dialect_is_krakow(self):
+    def test_python_default_dialect_is_warsaw(self):
         # Must match the Rust API, the CLI and the README.
-        assert tbenni.phonemize("brat ojca", include_stress=False) == "brad ɔjt͡sa"
+        assert tbenni.phonemize("brat ojca", include_stress=False) == "brat ɔjt͡sa"
 
     @pytest.mark.parametrize("fmt", ["ipa", "ipa_broad", "sampa", "benni", "piper"])
     def test_affricate_vs_cluster_survives_every_format(self, fmt):
@@ -255,3 +289,13 @@ class TestDefaultsAndFormats:
             out = tbenni.phonemize(word, format="piper", include_stress=False)
             unknown = {ch for ch in out if ch not in PIPER_MAP}
             assert not unknown, f"{word}: {out!r} has tokens outside the Piper map: {unknown}"
+
+    def test_multilingual_dispatch_via_phonemize(self):
+        assert tbenni.phonemize("chleba", lang="cs") == "xlɛba"
+        assert tbenni.phonemize("chleba.", lang="cs") == "xlɛba."
+        assert tbenni.phonemize_batch(["chleba", "dětství"], lang="cs") == ["xlɛba", "ɟɛtstviː"]
+
+    def test_digits_and_punctuation_preservation(self):
+        assert tbenni.phonemize("rok 2024") == "ˈrɔk 2024"
+        assert tbenni.phonemize("„Dzień dobry!”") == "„ˈd͡ʑɛɲ ˈdɔbrɨ!”"
+        assert tbenni.phonemize("cześć ... jak", include_stress=False) == "t͡ʂɛɕt͡ɕ ... jak"

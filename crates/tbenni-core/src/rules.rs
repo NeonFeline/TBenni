@@ -3,7 +3,7 @@ use crate::exceptions::{
 };
 use crate::phoneme::Phoneme;
 use crate::strutil::{contains, has_prefix, has_suffix};
-use crate::types::{Config, Dialect, StressMode};
+use crate::types::{Config, Dialect, SilesianRegion, StressMode};
 
 use std::borrow::Cow;
 
@@ -13,7 +13,9 @@ const FORCED_DIPHTHONG_MARKER: char = '^';
 /// Convert a single orthographic word into a vector of phonemes.
 pub fn phonemize_word(word: &str, config: &Config) -> Vec<Phoneme> {
     // Fast path: lowercase ASCII letters (plus ' and -) need no cleaning
-    let plain_ascii = word.bytes().all(|b| b.is_ascii_lowercase() || b == b'-' || b == b'\'');
+    let plain_ascii = word
+        .bytes()
+        .all(|b| b.is_ascii_lowercase() || b == b'-' || b == b'\'');
     let cleaned: Cow<str> = if plain_ascii {
         Cow::Borrowed(word)
     } else if word.chars().any(|c| c.is_uppercase()) {
@@ -23,7 +25,10 @@ pub fn phonemize_word(word: &str, config: &Config) -> Vec<Phoneme> {
                 .filter(|c| c.is_alphabetic() || *c == '-' || *c == '\'')
                 .collect(),
         )
-    } else if word.chars().any(|c| !c.is_alphabetic() && c != '-' && c != '\'') {
+    } else if word
+        .chars()
+        .any(|c| !c.is_alphabetic() && c != '-' && c != '\'')
+    {
         Cow::Owned(
             word.chars()
                 .filter(|c| c.is_alphabetic() || *c == '-' || *c == '\'')
@@ -79,7 +84,7 @@ pub fn phonemize_word(word: &str, config: &Config) -> Vec<Phoneme> {
 
     // 8. Pass 6: Silesian specific dialectal phonetic transformations
     if config.dialect == Dialect::Slask {
-        apply_silesian_transformations(&mut phonemes);
+        apply_silesian_transformations(&mut phonemes, config);
     }
 
     // 9. Pass 7: Syllabification and stress placement
@@ -163,7 +168,8 @@ static RESPELL_STEMS: &[(&str, &str)] = &[
 
 /// Prefixes after which a respelled stem may start.
 const STEM_PREFIXES: &[&str] = &[
-    "nie", "s", "z", "ze", "po", "prze", "przy", "od", "roz", "wy", "za", "na", "do", "u", "re", "anty",
+    "nie", "s", "z", "ze", "po", "prze", "przy", "od", "roz", "wy", "za", "na", "do", "u", "re",
+    "anty",
 ];
 
 fn match_stem(word: &str, start: usize) -> Option<(usize, &'static str, &'static str)> {
@@ -183,7 +189,12 @@ fn apply_respelling(word: &str) -> Option<String> {
         return Some(RESPELL_WORDS[idx].1.to_string());
     }
     let mut found = match_stem(word, 0);
-    if found.is_none() && matches!(word.as_bytes().first(), Some(b'n' | b's' | b'z' | b'p' | b'o' | b'r' | b'w' | b'd' | b'u' | b'a')) {
+    if found.is_none()
+        && matches!(
+            word.as_bytes().first(),
+            Some(b'n' | b's' | b'z' | b'p' | b'o' | b'r' | b'w' | b'd' | b'u' | b'a')
+        )
+    {
         for p in STEM_PREFIXES {
             if has_prefix(word, p) {
                 found = match_stem(word, p.len());
@@ -221,10 +232,27 @@ fn preprocess_morphemes(word: &str) -> Cow<'_, str> {
     // Check for marznąć family: 'rz' is [r-z], NOT [ʐ]!
     // ("zamarz-"/"przemarz-" alone would also catch zamarzyć "to dream" [zamaʐɨt͡ɕ].)
     let marz_stems = [
-        "marzn", "marzł", "marzli", "marzły", "marzła", "marznię", "marznie",
-        "zmarzlak", "zmarzli", "zmarzł", "odmarzli",
-        "odmarza", "wymarza", "przemarza", "zamarza", "marzać", "marzaj", "marzał",
-        "mierzi", "obmierz", "murzasi",
+        "marzn",
+        "marzł",
+        "marzli",
+        "marzły",
+        "marzła",
+        "marznię",
+        "marznie",
+        "zmarzlak",
+        "zmarzli",
+        "zmarzł",
+        "odmarzli",
+        "odmarza",
+        "wymarza",
+        "przemarza",
+        "zamarza",
+        "marzać",
+        "marzaj",
+        "marzał",
+        "mierzi",
+        "obmierz",
+        "murzasi",
     ];
     if contains(word, "rz") {
         for stem in marz_stems {
@@ -234,7 +262,10 @@ fn preprocess_morphemes(word: &str) -> Cow<'_, str> {
             }
         }
         // The name Tarzan [tarzan], but not tarzać się / powtarzany [taʐa-]
-        if has_prefix(word, "tarzan") && !has_prefix(word, "tarzani") && !has_prefix(word, "tarzany") {
+        if has_prefix(word, "tarzan")
+            && !has_prefix(word, "tarzani")
+            && !has_prefix(word, "tarzany")
+        {
             return Cow::Owned(word.replacen("tarzan", "tar#zan", 1));
         }
     }
@@ -329,7 +360,10 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
         }
 
         // Anglicism root: 'dubbing-' / 'zdubbing-' -> [dabʲiŋk] (coda) / [dabʲiŋɡ-] (onset)
-        if c == 'd' && next == Some('u') && chars[i..].starts_with(&['d', 'u', 'b', 'b', 'i', 'n', 'g']) {
+        if c == 'd'
+            && next == Some('u')
+            && chars[i..].starts_with(&['d', 'u', 'b', 'b', 'i', 'n', 'g'])
+        {
             result.push(Phoneme::D);
             result.push(Phoneme::A);
             result.push(Phoneme::BPal);
@@ -349,7 +383,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
         // Tri-graphs / multi-letter sequences
         if c == 'd' && next == Some('z') && next2 == Some('i') {
             let next3 = chars.get(i + 3).copied();
-            let is_before_vowel = next3.map_or(false, is_vowel_char);
+            let is_before_vowel = next3.is_some_and(is_vowel_char);
             result.push(Phoneme::Dzi);
             if is_before_vowel {
                 i += 3; // 'dzi' before vowel -> [d͡ʑ], 'i' is palatalizer only
@@ -370,12 +404,16 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
         // Compound hiatus 'oo' -> [ɔʔɔ] (e.g. bystrooki, dookoła, samoobrona, wodoodporny)
         // vs English borrowings with 'oo' -> [u] (e.g. audiobook, boom, boombox, cool, snooker)
         if c == 'o' && next == Some('o') {
-            let is_english_oo = (i >= 1 && matches!(chars[i - 1], 'b' | 'l') && chars[i..].starts_with(&['o', 'o', 'k']))
+            let is_english_oo = (i >= 1
+                && matches!(chars[i - 1], 'b' | 'l')
+                && chars[i..].starts_with(&['o', 'o', 'k']))
                 || chars[i..].starts_with(&['o', 'o', 'l'])
                 || chars[i..].starts_with(&['o', 'o', 'm'])
                 || (i >= 1 && chars[i - 1] == 'f' && chars[i..].starts_with(&['o', 'o', 'd']))
-                || (i >= 2 && &chars[i - 2..i + 2] == &['s', 'n', 'o', 'o'])
-                || (i >= 1 && matches!(chars[i - 1], 'v' | 'w' | 'g' | 'h') && chars[i..].starts_with(&['o', 'o', 'd']));
+                || (i >= 2 && chars[i - 2..i + 2] == ['s', 'n', 'o', 'o'])
+                || (i >= 1
+                    && matches!(chars[i - 1], 'v' | 'w' | 'g' | 'h')
+                    && chars[i..].starts_with(&['o', 'o', 'd']));
             if is_english_oo {
                 result.push(Phoneme::U);
                 i += 2;
@@ -427,7 +465,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
         if c == 'c' && next == Some('h') {
             if next2 == Some('i') {
                 let next3 = chars.get(i + 3).copied();
-                let is_before_vowel = next3.map_or(false, is_vowel_char);
+                let is_before_vowel = next3.is_some_and(is_vowel_char);
                 result.push(Phoneme::ChPal);
                 if is_before_vowel {
                     result.push(Phoneme::J);
@@ -460,7 +498,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
 
         // 'ci', 'si', 'zi', 'ni'
         if c == 'c' && next == Some('i') {
-            let is_before_vowel = next2.map_or(false, is_vowel_char);
+            let is_before_vowel = next2.is_some_and(is_vowel_char);
             result.push(Phoneme::Ci);
             if is_before_vowel {
                 i += 2;
@@ -471,7 +509,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
             continue;
         }
         if c == 's' && next == Some('i') {
-            let is_before_vowel = next2.map_or(false, is_vowel_char);
+            let is_before_vowel = next2.is_some_and(is_vowel_char);
             result.push(Phoneme::Si);
             if is_before_vowel {
                 i += 2;
@@ -483,11 +521,10 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
             continue;
         }
         if c == 'z' && next == Some('i') {
-            let is_before_vowel = next2.map_or(false, is_vowel_char);
+            let is_before_vowel = next2.is_some_and(is_vowel_char);
             // Prefixes bez- and dez- before 'i' preserve hard [z] in cultured orthoepy (e.g. bezimienny, dezinformacja)
             let is_hard_z_prefix = i == 2
-                && ((chars[0] == 'b' && chars[1] == 'e')
-                    || (chars[0] == 'd' && chars[1] == 'e'));
+                && ((chars[0] == 'b' && chars[1] == 'e') || (chars[0] == 'd' && chars[1] == 'e'));
             if is_hard_z_prefix {
                 result.push(Phoneme::Z);
                 result.push(Phoneme::I);
@@ -505,7 +542,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
             continue;
         }
         if c == 'n' && next == Some('i') {
-            let is_before_vowel = next2.map_or(false, is_vowel_char);
+            let is_before_vowel = next2.is_some_and(is_vowel_char);
             result.push(Phoneme::Ni);
             if is_before_vowel {
                 // In Polish native words, 'ni' before vowel is pure [ɲ] (e.g. ania, bania, dynia, grania, pustynia).
@@ -524,7 +561,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
 
         // Palatalized labials and velars: pi, bi, fi, wi, mi, ki, gi, li, chi
         if next == Some('i') {
-            let is_before_vowel = next2.map_or(false, is_vowel_char);
+            let is_before_vowel = next2.is_some_and(is_vowel_char);
             let palatal_consonant = match c {
                 'p' => Some(Phoneme::PPal),
                 'b' => Some(Phoneme::BPal),
@@ -565,7 +602,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
 
         // Palatalized trill in borrowings with 'ri' -> [rʲi] before consonant, [rʲj] before vowel (e.g. barista, catering, arizona, adrian, historia)
         if c == 'r' && next == Some('i') {
-            let is_before_vowel = next2.map_or(false, is_vowel_char);
+            let is_before_vowel = next2.is_some_and(is_vowel_char);
             result.push(Phoneme::RPal);
             if is_before_vowel {
                 result.push(Phoneme::J);
@@ -577,7 +614,7 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
         }
 
         // Borrowings with coronal consonants + 'i' before vowel: 'di', 'ti' -> [d, j], [t, j] (e.g. radio, partia, abiturient)
-        if (c == 'd' || c == 't') && next == Some('i') && next2.map_or(false, is_vowel_char) {
+        if (c == 'd' || c == 't') && next == Some('i') && next2.is_some_and(is_vowel_char) {
             // '-tii' has no glide (partii -> [partʲi], kwestii), unlike '-dii' (komedii -> [kɔmɛdji])
             if c == 't' && next2 == Some('i') {
                 result.push(Phoneme::T);
@@ -625,7 +662,13 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
             'u' => {
                 // Distilled rule: Diphthongization in 'au', 'eu' -> [aw], [ɛw] (auto -> [awtɔ], Europa -> [ɛwrɔpa])
                 // Exceptions: Latin endings in -eum (muzeum, apogeum, liceum), -eusz (ateusz, mateusz), or aleut-
-                let is_prev_vowel = matches!(result.last(), Some(Phoneme::A) | Some(Phoneme::E) | Some(Phoneme::ASlant) | Some(Phoneme::ESlant));
+                let is_prev_vowel = matches!(
+                    result.last(),
+                    Some(Phoneme::A)
+                        | Some(Phoneme::E)
+                        | Some(Phoneme::ASlant)
+                        | Some(Phoneme::ESlant)
+                );
                 let is_eum_hiatus = matches!(result.last(), Some(Phoneme::E))
                     && ((next == Some('m') && i + 2 == n)
                         || (next == Some('s') && next2 == Some('z'))
@@ -634,7 +677,10 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
                 let forced_diphthong = i > 0 && chars[i - 1] == FORCED_DIPHTHONG_MARKER;
                 let is_prefix_hiatus = !forced_diphthong
                     && ((i == 2 && chars[i - 1] == 'a' && matches!(chars[0], 'n' | 'z'))
-                        || (i == 3 && chars[i - 1] == 'e' && chars[i - 2] == 'i' && chars[0] == 'n')
+                        || (i == 3
+                            && chars[i - 1] == 'e'
+                            && chars[i - 2] == 'i'
+                            && chars[0] == 'n')
                         || (i == 2 && chars[i - 1] == 'o' && chars[0] == 'p')
                         || (i > 0 && chars[i - 1] == '#'));
                 if is_prev_vowel && !is_eum_hiatus && !is_prefix_hiatus {
@@ -682,6 +728,10 @@ fn convert_graphemes(input: &str, _config: &Config) -> Vec<Phoneme> {
 
 /// Pass 2: Contextual nasal vowel decomposition (ząb -> zomp, ręka -> renka/reŋka, wziął -> wzioł).
 fn decompose_nasal_vowels(phonemes: &mut Vec<Phoneme>, config: &Config) {
+    if config.dialect == Dialect::Slask {
+        decompose_nasal_vowels_silesian(phonemes);
+        return;
+    }
     let mut i = 0;
     while i < phonemes.len() {
         let p = phonemes[i];
@@ -774,18 +824,77 @@ fn decompose_nasal_vowels(phonemes: &mut Vec<Phoneme>, config: &Config) {
     }
 }
 
+/// Silesian decomposed nasals (nosówki rozłożone; Cieszyn norm, Zasada 6.6).
+/// The nasal vowel is split into a *marked* nucleus (kept as ONasal/ENasal so
+/// the later raising stage can still see its nasal origin) plus a homorganic
+/// nasal consonant:
+/// - before stops and affricates: [m]/[n]/[n̠]/[ɲ]/[ŋ], exactly as in standard
+///   Polish (the norm adopts the Polish decomposition here);
+/// - before fricatives: consonantal nasality [n] ("-on-, -en-":
+///   Ślōnzok, Ślōnsk, mynża);
+/// - before liquids: bare nucleus ("wziōł");
+/// - word-final: ą -> nucleus + [m] ("-ōm": idōm); ę -> bare nucleus, since the
+///   norm excludes word-final ę from decomposition and its reflex is regional
+///   (resolved by `apply_silesian_nasal_nuclei` from `Config::silesian_region`).
+fn decompose_nasal_vowels_silesian(phonemes: &mut Vec<Phoneme>) {
+    let mut i = 0;
+    while i < phonemes.len() {
+        let p = phonemes[i];
+        if p != Phoneme::ONasal && p != Phoneme::ENasal {
+            i += 1;
+            continue;
+        }
+        let is_o = p == Phoneme::ONasal;
+        let nasal = match phonemes.get(i + 1).copied() {
+            // Bilabials -> homorganic [m]
+            Some(Phoneme::P | Phoneme::B | Phoneme::PPal | Phoneme::BPal) => Some(Phoneme::M),
+            // Dentals -> homorganic [n]
+            Some(Phoneme::T | Phoneme::D | Phoneme::C | Phoneme::Dz) => Some(Phoneme::N),
+            // Retroflex / postalveolar affricates -> [n̠]
+            Some(Phoneme::Cz | Phoneme::DzRetro) => Some(Phoneme::NRetro),
+            // Alveolo-palatals -> [ɲ]
+            Some(Phoneme::Ci | Phoneme::Dzi) => Some(Phoneme::Ni),
+            // Velars -> [ŋ]
+            Some(Phoneme::K | Phoneme::G | Phoneme::KPal | Phoneme::GPal) => Some(Phoneme::Ng),
+            // Liquids -> bare nucleus ("wziōł")
+            Some(Phoneme::L | Phoneme::LPal | Phoneme::W) => None,
+            // Word-final: ą -> "-ōm"; ę -> bare nucleus (regional reflex)
+            None => {
+                if is_o {
+                    Some(Phoneme::M)
+                } else {
+                    None
+                }
+            }
+            // Everything else (fricatives, r, j, ...) -> consonantal nasality [n]
+            Some(_) => Some(Phoneme::N),
+        };
+        if let Some(n) = nasal {
+            phonemes.insert(i + 1, n);
+            i += 2;
+        } else {
+            i += 1;
+        }
+    }
+}
+
 /// Interjections without vowel letters that are pronounced as written, not spelled out.
 const VOWELLESS_INTERJECTIONS: &[&str] = &[
-    "hm", "hmm", "mhm", "brr", "pst", "psst", "sza", "szsz", "tss", "cyt", "kch", "pff", "pfff", "grr",
+    "hm", "hmm", "mhm", "brr", "pst", "psst", "sza", "szsz", "tss", "cyt", "kch", "pff", "pfff",
+    "grr",
 ];
 
 /// Spells a word with no vowel letters as Polish letter names (NKWD -> [ɛnkaɛftɛ]).
 fn spell_abbreviation(word: &str) -> Option<Vec<Phoneme>> {
     use Phoneme::*;
     let n_chars = word.chars().count();
-    if n_chars < 2
-        || n_chars > 8
-        || word.chars().any(|c| matches!(c, 'a' | 'ą' | 'e' | 'ę' | 'i' | 'o' | 'ó' | 'u' | 'y' | '-' | '\''))
+    if !(2..=8).contains(&n_chars)
+        || word.chars().any(|c| {
+            matches!(
+                c,
+                'a' | 'ą' | 'e' | 'ę' | 'i' | 'o' | 'ó' | 'u' | 'y' | '-' | '\''
+            )
+        })
         || VOWELLESS_INTERJECTIONS.contains(&word)
     {
         return None;
@@ -937,7 +1046,7 @@ fn apply_final_devoicing(phonemes: &mut [Phoneme]) {
 }
 
 /// Pass 6: Silesian specific dialectal transformations.
-fn apply_silesian_transformations(phonemes: &mut Vec<Phoneme>) {
+fn apply_silesian_transformations(phonemes: &mut Vec<Phoneme>, config: &Config) {
     // 1. Initial /o-/ labialization: insert [w] before initial [ɔ]
     if let Some(&first) = phonemes.first() {
         if first == Phoneme::O || first == Phoneme::OSlant {
@@ -949,6 +1058,53 @@ fn apply_silesian_transformations(phonemes: &mut Vec<Phoneme>) {
     for p in phonemes.iter_mut() {
         if *p == Phoneme::ESlant {
             *p = Phoneme::Y; // e pochylone -> [ɨ]
+        }
+    }
+
+    // 3. Surface realization of the marked nasal-vowel nuclei
+    apply_silesian_nasal_nuclei(phonemes, config);
+}
+
+/// Silesian nasal-nucleus stage, applied AFTER decomposition
+/// (`decompose_nasal_vowels_silesian`). It resolves the marked nasal-vowel
+/// nuclei into surface oral vowels:
+/// - ą-nucleus: raised [o] when `Config::silesian_raising` ("idōm" -> [idom],
+///   "piątek" -> [pjontɛk]), plain [ɔ] otherwise ([idɔm], [pjɔntɛk]);
+/// - ę-nucleus: plain [ɛ] when decomposed ("-em-, -en-": zęby -> [zɛmby]),
+///   regional reflex word-finally (Config::silesian_region).
+///
+/// This is deliberately a self-contained stage over marked nuclei: a learned
+/// raising model (e.g. a CART distilled like the other languages) can replace
+/// `apply_silesian_nasal_nuclei` wholesale without touching decomposition.
+fn apply_silesian_nasal_nuclei(phonemes: &mut [Phoneme], config: &Config) {
+    for i in 0..phonemes.len() {
+        match phonemes[i] {
+            Phoneme::ONasal => {
+                phonemes[i] = if config.silesian_raising {
+                    Phoneme::OSlant
+                } else {
+                    Phoneme::O
+                };
+            }
+            Phoneme::ENasal => {
+                // Decomposed positions carry an explicit nasal consonant
+                // (inserted by `decompose_nasal_vowels_silesian`); a bare
+                // nucleus is word-final (or pre-liquid), i.e. the regional -ę.
+                let decomposed = matches!(
+                    phonemes.get(i + 1),
+                    Some(Phoneme::M | Phoneme::N | Phoneme::Ni | Phoneme::NRetro | Phoneme::Ng)
+                );
+                phonemes[i] = if decomposed {
+                    Phoneme::E
+                } else {
+                    match config.silesian_region {
+                        SilesianRegion::Katowice => Phoneme::A,
+                        SilesianRegion::Opole => Phoneme::ANasal,
+                        SilesianRegion::Cieszyn => Phoneme::E,
+                    }
+                };
+            }
+            _ => {}
         }
     }
 }
@@ -979,13 +1135,17 @@ fn apply_stress(phonemes: &mut Vec<Phoneme>, word: &str, config: &Config) {
             // Check for antepenultimate (3rd from end) or pre-antepenultimate (4th from end)
             let last_byte = word.as_bytes().last().copied();
             let clitic_tail = matches!(last_byte, Some(b'y' | b'e'));
-            if num_vowels >= 4 && clitic_tail && (has_suffix(word, "byśmy") || has_suffix(word, "byście")) {
+            if num_vowels >= 4
+                && clitic_tail
+                && (has_suffix(word, "byśmy") || has_suffix(word, "byście"))
+            {
                 last[3]
             } else if num_vowels >= 3
-                && ((clitic_tail && (has_suffix(word, "liśmy")
-                    || has_suffix(word, "liście")
-                    || has_suffix(word, "łyśmy")
-                    || has_suffix(word, "łyście")))
+                && ((clitic_tail
+                    && (has_suffix(word, "liśmy")
+                        || has_suffix(word, "liście")
+                        || has_suffix(word, "łyśmy")
+                        || has_suffix(word, "łyście")))
                     || is_antepenultimate_stress_lowercase(word))
             {
                 last[2]

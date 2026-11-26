@@ -1,26 +1,64 @@
 [build-system]
-requires = ["maturin>=1.5,<2.0"]
+requires = ["maturin>=1.7,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "tbenni"
 version = "0.1.0"
-description = "High-performance Polish Phonemizer named in honor of Tytus Benni"
+description = "High-performance Polish phonemizer and grapheme-to-phoneme engine with Rust bindings"
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT OR Apache-2.0" }
 authors = [{ name = "TBenni Contributors" }]
 keywords = ["phonemizer", "g2p", "polish", "nlp", "speech", "tts", "benni", "silesian"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Multimedia :: Sound/Audio :: Speech",
 ]
 dependencies = []
 
+[project.optional-dependencies]
+tts = [
+    "numpy>=1.21",
+    "soundfile>=0.12",
+    "piper-tts>=1.2.0",
+]
+dev = [
+    "maturin>=1.7,<2.0",
+    "pytest>=7",
+]
+
+[project.scripts]
+tbenni-tts = "tbenni.tts_cli:main"
+tbenni-web = "tbenni.web_ui:main"
+
+[project.urls]
+Homepage = "https://github.com/NeonFeline/TBenni"
+Repository = "https://github.com/NeonFeline/TBenni"
+Issues = "https://github.com/NeonFeline/TBenni/issues"
+Changelog = "https://github.com/NeonFeline/TBenni/releases"
+
 [tool.maturin]
 manifest-path = "crates/tbenni-py/Cargo.toml"
 module-name = "tbenni._tbenni"
 python-source = "python"
+strip = true
+include = ["LICENSE-MIT", "LICENSE-APACHE", "tests/**/*", "README.md"]
+exclude = ["**/__pycache__/**", "**/*.pyc"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]

@@ -7,7 +7,7 @@ fn main() {
     let text = std::fs::read_to_string(path).expect("read word list");
     let words: Vec<&str> = text
         .lines()
-        .filter_map(|l| l.split(|c| c == '\t' || c == ' ').next())
+        .filter_map(|l| l.split(['\t', ' ']).next())
         .filter(|w| !w.is_empty())
         .collect();
     let mut best = f64::MAX;
